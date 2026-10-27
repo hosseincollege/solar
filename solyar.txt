@@ -1,0 +1,9 @@
+cd D:\ERP\solar
+$env:DATABASE_URL = "postgres://1d937d73cf0c27f4db29bc414fcbeee29739283e86114633e2bdeb2755705c83:sk_TUBUKhBSRWG0kmwMxzDOR@db.prisma.io:5432/postgres?sslmode=require"
+
+
+psql "$env:DATABASE_URL" -v ON_ERROR_STOP=1 -c "DROP TABLE IF EXISTS solar_presence; DROP TABLE IF EXISTS solar_visits;"
+if ($LASTEXITCODE -ne 0) { throw "پاک‌کردن جدول‌ها انجام نشد." }
+
+psql "$env:DATABASE_URL" -v ON_ERROR_STOP=1 -f ".\database\analytics.sql"
+if ($LASTEXITCODE -ne 0) { throw "ساخت دوبارهٔ جدول‌ها انجام نشد." }

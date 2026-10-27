@@ -485,22 +485,11 @@ export default function SolarWorkspace() {
   useEffect(() => {
     if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') return;
 
-    let sessionId = localStorage.getItem('solar.analytics.session.v1');
-    if (!sessionId) {
-      sessionId = crypto.randomUUID();
-      localStorage.setItem('solar.analytics.session.v1', sessionId);
-    }
-    const visitId = crypto.randomUUID();
-    let firstHeartbeat = true;
-
     const heartbeat = () => {
-      const body = firstHeartbeat ? { sessionId, visitId } : { sessionId };
       void fetch('/api/analytics/presence', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
         keepalive: true,
-      }).then((response) => { if (response.ok) firstHeartbeat = false; }).catch(() => undefined);
+      }).catch(() => undefined);
     };
 
     const onVisible = () => { if (!document.hidden) heartbeat(); };
@@ -761,8 +750,8 @@ export default function SolarWorkspace() {
     </header>
     {analyticsOpen && <div className="analytics-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setAnalyticsOpen(false); }}>
       <section className="analytics-dialog" role="dialog" aria-modal="true" aria-labelledby="analytics-title" dir="rtl">
-        <div className="analytics-heading"><div><h2 id="analytics-title">آمار سامانه</h2><p>افراد آنلاین و بازدیدهای ثبت‌شده</p></div><button className="icon-button" type="button" aria-label="بستن" onClick={() => setAnalyticsOpen(false)}>×</button></div>
-        <div className="analytics-grid">{([['onlineNow', 'افراد آنلاین'], ['today', 'بازدید امروز'], ['week', 'بازدید این هفته'], ['month', 'بازدید این ماه']] as const).map(([key, label]) => <div className="analytics-stat" key={key}><span>{label}</span><strong>{analytics ? analytics[key].toLocaleString('fa-IR') : '—'}</strong></div>)}</div>
+        <div className="analytics-heading"><div><h2 id="analytics-title">آمار سامانه</h2><p>بازدیدکنندگان یکتا بر اساس IP</p></div><button className="icon-button" type="button" aria-label="بستن" onClick={() => setAnalyticsOpen(false)}>×</button></div>
+        <div className="analytics-grid">{([['onlineNow', 'آنلاین یکتا'], ['today', 'امروز'], ['week', 'این هفته'], ['month', 'این ماه']] as const).map(([key, label]) => <div className="analytics-stat" key={key}><span>{label}</span><strong>{analytics ? analytics[key].toLocaleString('fa-IR') : '—'}</strong></div>)}</div>
         <p className="analytics-note" role="status">{window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'آمار بازدید فقط در نسخهٔ مستقرشده روی Vercel فعال است.' : analyticsLoading ? 'در حال دریافت آمار…' : analytics ? 'آمار به‌روز است.' : 'پس از اتصال دیتابیس Vercel، آمار اینجا نمایش داده می‌شود.'}</p>
       </section>
     </div>}    <main className="solar-content" dir="rtl">

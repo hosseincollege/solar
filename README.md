@@ -21,6 +21,6 @@ Local browser storage is tied to each browser and device. It is not synchronized
 
 - Set `DATABASE_URL` in Vercel to the Prisma Postgres pooled TCP connection string (`pooled.db.prisma.io`). Keep the direct `db.prisma.io` connection for database administration and schema changes.
 - Apply [`database/analytics.sql`](database/analytics.sql) once using the direct database connection before enabling analytics.
-- Presence heartbeats are refreshed every 30 seconds and count as online for two minutes. The summary reports visits by the `Asia/Tehran` calendar day, Monday-based week, and calendar month.
+- Presence heartbeats are refreshed every 30 seconds and count as online for two minutes. Daily, weekly, and monthly totals count distinct client IPs within each `Asia/Tehran` calendar period, so repeat visits and refreshes from one IP count once per period.
 - Analytics endpoints accept/write data only when `VERCEL=1` and `VERCEL_ENV=production`. Local development and Preview deployments do not write analytics.
-- The database stores anonymous random session and visit IDs plus timestamps; it does not store visitor IP addresses or paths.
+- The database stores keyed HMAC hashes of client IP addresses plus timestamps, never raw IP addresses or paths. Set `ANALYTICS_IP_HASH_SECRET` in Vercel to a long random secret; if omitted, the database URL is used as the HMAC key.

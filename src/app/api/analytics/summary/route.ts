@@ -23,11 +23,10 @@ export async function GET() {
            date_trunc('month', now() AT TIME ZONE 'Asia/Tehran') AT TIME ZONE 'Asia/Tehran' AS month_start
        )
        SELECT
-         (SELECT count(*)::int FROM solar_presence WHERE last_seen_at >= now() - interval '2 minutes') AS "onlineNow",
-         count(*) FILTER (WHERE solar_visits.visited_at >= bounds.today_start)::int AS today,
-         count(*) FILTER (WHERE solar_visits.visited_at >= bounds.week_start)::int AS week,
-         count(*) FILTER (WHERE solar_visits.visited_at >= bounds.month_start)::int AS month
-       FROM solar_visits CROSS JOIN bounds`,
+         (SELECT count(*)::int FROM solar_unique_presence WHERE last_seen_at >= now() - interval '2 minutes') AS "onlineNow",
+         (SELECT count(DISTINCT visitor_hash)::int FROM solar_unique_visits, bounds WHERE visited_at >= bounds.today_start) AS today,
+         (SELECT count(DISTINCT visitor_hash)::int FROM solar_unique_visits, bounds WHERE visited_at >= bounds.week_start) AS week,
+         (SELECT count(DISTINCT visitor_hash)::int FROM solar_unique_visits, bounds WHERE visited_at >= bounds.month_start) AS month`,
     );
 
     return NextResponse.json(result.rows[0] ?? { onlineNow: 0, today: 0, week: 0, month: 0 }, {
