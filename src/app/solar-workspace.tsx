@@ -390,6 +390,12 @@ export default function SolarWorkspace() {
     }
     return [...bySite.entries()].map(([site, states]) => ({ site, states } satisfies SiteRow)).sort((a, b) => a.site.localeCompare(b.site));
   }, [entries, indexedEntries, deferredQuery, selectedColumns, specialSites, activeShowSpecialSites, previousReport, previousStatesBySite]);
+  const visibleSpecialSiteCount = useMemo(() => {
+    const normalizedQuery = deferredQuery.trim().toLocaleLowerCase();
+    return new Set(indexedEntries
+      .filter(({ entry, searchText }) => specialSites.has(entry.site) && (!normalizedQuery || searchText.includes(normalizedQuery)))
+      .map(({ entry }) => entry.site)).size;
+  }, [deferredQuery, indexedEntries, specialSites]);
   const historyForSite = (row: SiteRow) => {
     if (!previousReport) return 'اولین گزارش روز';
     const current = row.states;
@@ -532,6 +538,7 @@ export default function SolarWorkspace() {
     setDownText(report.downText);
     setUnreachableText(report.unreachableText);
     if (report.equipmentColumns?.length) setSelectedColumns(report.equipmentColumns);
+    if (typeof report.showSpecialSites === 'boolean') setShowSpecialSites(report.showSpecialSites);
     const restoredTime = jalaliDateTimeFromTimestamp(report.createdAt);
     setCapturedDate(restoredTime.date);
     setCapturedTime(restoredTime.time);
@@ -755,7 +762,7 @@ export default function SolarWorkspace() {
         <p className="analytics-note" role="status">{window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'آمار بازدید فقط در نسخهٔ مستقرشده روی Vercel فعال است.' : analyticsLoading ? 'در حال دریافت آمار…' : analytics ? 'آمار به‌روز است.' : 'پس از اتصال دیتابیس Vercel، آمار اینجا نمایش داده می‌شود.'}</p>
       </section>
     </div>}    <main className="solar-content" dir="rtl">
-      <section className="solar-intro"><div className="intro-actions"><button className={`button ${formOpen ? 'button-quiet' : 'button-primary'}`} type="button" onClick={() => formOpen ? closeStatusForm() : beginNewStatus()}>{formOpen ? <X size={18} /> : <Plus size={18} />}{formOpen ? 'بستن وضعیت' : 'افزودن وضعیت جدید'}</button><button className="button button-quiet special-entry-button" type="button" onClick={toggleSpecialEditor}><Plus size={17} />{specialEditorOpen ? 'بستن ویرایش' : 'ویرایش سرقت و تخریب'}</button><JalaliDatePicker value={capturedDate} onChange={(value) => { setCapturedDate(value); setSelectedHistoryDate(value); }} /><label className="special-list-toggle special-table-toggle"><input type="checkbox" checked={showSpecialSites} onChange={(event) => setShowSpecialSites(event.target.checked)} /><span>نمایش سرقت و تخریب</span></label><button className="icon-button clear-browser-data" type="button" aria-label="پاک‌سازی همهٔ اطلاعات مرورگر" title="پاک‌سازی همهٔ اطلاعات مرورگر" onClick={clearBrowserData}><Trash2 size={17} /></button>{notice && <p className="notice notice-inline" role="status"><Check size={15} />{notice}</p>}</div></section>
+      <section className="solar-intro"><div className="intro-actions"><button className={`button ${formOpen ? 'button-quiet' : 'button-primary'}`} type="button" onClick={() => formOpen ? closeStatusForm() : beginNewStatus()}>{formOpen ? <X size={18} /> : <Plus size={18} />}{formOpen ? 'بستن وضعیت' : 'افزودن وضعیت جدید'}</button><button className="button button-quiet special-entry-button" type="button" onClick={toggleSpecialEditor}><Plus size={17} />{specialEditorOpen ? 'بستن ویرایش' : 'ویرایش سرقت و تخریب'}</button><JalaliDatePicker value={capturedDate} onChange={(value) => { setCapturedDate(value); setSelectedHistoryDate(value); }} /><label className="special-list-toggle special-table-toggle"><input type="checkbox" checked={showSpecialSites} onChange={(event) => setShowSpecialSites(event.target.checked)} /><span>نمایش سرقت و تخریب ({visibleSpecialSiteCount.toLocaleString('fa-IR')})</span></label><button className="icon-button clear-browser-data" type="button" aria-label="پاک‌سازی همهٔ اطلاعات مرورگر" title="پاک‌سازی همهٔ اطلاعات مرورگر" onClick={clearBrowserData}><Trash2 size={17} /></button>{notice && <p className="notice notice-inline" role="status"><Check size={15} />{notice}</p>}</div></section>
 
       {formOpen && <section className="status-form" aria-label="افزودن وضعیت جدید">
         <div className="form-heading"><div><h2>افزودن وضعیت جدید</h2><p>فهرست‌ها را وارد کنید، ستون‌ها را در صورت نیاز ویرایش و ذخیره را بزنید.</p><button className="button button-quiet demo-fill-button" type="button" onClick={fillDemoData}><Clipboard size={16} />پر کردن با داده‌های تست</button></div></div>
@@ -783,7 +790,17 @@ export default function SolarWorkspace() {
       </section>}
 
       <section className="history-card"><div className="history-title"><div><h2>گزارش‌های ذخیره‌شده</h2><span className="count history-count">{reportsForSelectedDate.length.toLocaleString('fa-IR')}</span></div></div>
-        {reportsForSelectedDate.length ? <ul className="report-list">{reportsForSelectedDate.map((report) => <li className={activeReport?.id === report.id ? 'active-report' : undefined} key={report.id}><button type="button" className="report-main" onClick={() => restoreReport(report)}><span>{formatTime(report.createdAt)}</span><small>{new Set(report.entries.map((entry) => entry.site).filter((site) => showSpecialSites || !specialSites.has(site))).size.toLocaleString('fa-IR')} سامانه</small></button><button type="button" className="icon-button" aria-label="حذف گزارش" title="حذف گزارش" onClick={() => deleteReport(report.id)}><Trash2 size={17} /></button></li>)}</ul> : <p className="empty-history">برای این تاریخ گزارشی ذخیره نشده است.</p>}
+        {reportsForSelectedDate.length ? <ul className="report-list">{reportsForSelectedDate.map((report) => {
+          const isActive = activeReport?.id === report.id && hasSubmitted;
+          const visibleEquipment = new Set(report.equipmentColumns?.length ? report.equipmentColumns : DEFAULT_COLUMNS);
+          const reportSpecialSites = parseSpecialSiteList(report.specialText ?? specialText);
+          const reportSites = new Set(report.entries
+            .filter((entry) => (visibleEquipment.has(entry.equipment) || [...visibleEquipment].some((key) => EQUIPMENT_GROUPS.find((group) => group.key === key)?.codes.includes(entry.equipment)))
+              && (report.showSpecialSites || !reportSpecialSites.has(entry.site)))
+            .map((entry) => entry.site));
+          const reportCount = isActive ? siteRows.length : reportSites.size;
+          return <li className={isActive ? 'active-report' : undefined} key={report.id}><button type="button" className="report-main" onClick={() => restoreReport(report)}><span>{formatTime(report.createdAt)}</span><small>{reportCount.toLocaleString('fa-IR')} سامانه</small></button><button type="button" className="icon-button" aria-label="حذف گزارش" title="حذف گزارش" onClick={() => deleteReport(report.id)}><Trash2 size={17} /></button></li>;
+        })}</ul> : <p className="empty-history">برای این تاریخ گزارشی ذخیره نشده است.</p>}
       </section>
       <footer className="page-footer-intro" dir="rtl"><div className="page-footer-heading"><h1>وضعیت تجهیزات در سامانه سولار</h1><span className="footer-intro-icon" aria-hidden="true">📡</span></div><p>فهرست‌های Down و Unreachable را در باکس‌های مربوطه جای‌گذاری کنید؛ اطلاعات به‌صورت محلی در حافظهٔ مرورگر ذخیره می‌شوند.</p></footer>
     </main>
