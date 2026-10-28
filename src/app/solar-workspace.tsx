@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, startTransition, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { CalendarDays, Check, ChevronLeft, ChevronRight, Clipboard, Download, Info, MapPin, Monitor, Moon, Plus, RotateCcw, Save, Search, Sun, Trash2, Upload, X } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import demoData from '@/lib/solar-demo-data.json';
@@ -10,6 +10,24 @@ type State = 'down' | 'unreachable';
 type Entry = { site: string; equipment: string; state: State; source: string };
 type Report = { id: string; createdAt: string; entries: Entry[]; downText: string; unreachableText: string; specialText?: string; showSpecialSites?: boolean; equipmentColumns?: string[] };
 type SiteRow = { site: string; states: Map<string, State> };
+
+const SolarTableSearch = memo(function SolarTableSearch({ initialQuery, onQueryChange }: {
+  initialQuery: string;
+  onQueryChange: (value: string) => void;
+}) {
+  const [value, setValue] = useState(initialQuery);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => startTransition(() => onQueryChange(value)), 180);
+    return () => window.clearTimeout(timer);
+  }, [value, onQueryChange]);
+
+  return <form className="table-search" role="search" onSubmit={(event) => event.preventDefault()}>
+    <Search size={17} aria-hidden="true" />
+    <input type="search" aria-label="جستجو در جدول سولار" placeholder="جستجو" value={value} onChange={(event) => setValue(event.target.value)} />
+  </form>;
+});
+
 const STORAGE_KEY = 'solar.reports.v1';
 const DRAFT_KEY = 'solar.draft.v1';
 const SPECIAL_SITES_KEY = 'solar.special-sites.v1';
@@ -709,7 +727,7 @@ export default function SolarWorkspace() {
     const rows = siteRows.map((row, index) => [index + 1, row.site, ...(showSpecialColumn ? [specialSites.get(row.site) ?? '—'] : []), ...groups.map((group) => group.codes
       .filter((code) => row.states.has(code))
       .map((code) => `${code} [[RAHCOM_STATUS_${row.states.get(code)!.toUpperCase()}]]`)
-      .join(' | ') || '—'), historyForSite(row)]);
+      .join(group.key.toUpperCase() === 'LTE' ? '   ' : ' | ') || '—'), historyForSite(row)]);
     const sheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
     sheet['!views'] = [{ rightToLeft: true }];
     sheet['!cols'] = headers.map((header, index) => {
@@ -784,7 +802,7 @@ export default function SolarWorkspace() {
       {hasSubmitted && <section className="table-card">
         <div className="table-report-heading">
           <div className="table-province"><button type="button" className="status-dismiss" aria-label="بستن وضعیت نمایش‌داده‌شده" title="بستن وضعیت نمایش‌داده‌شده" onClick={closeDisplayedStatus}><X size={17} /></button><MapPin size={18} /><span>{provinces.length ? `استان ${provinces.join('، ')}` : 'وضعیت سولار'}</span><span className="report-date">{formatJalaliDateWithWeekday(capturedDate) ?? capturedDate}</span><span className="report-clock">ساعت {capturedTime.replace(/\d/g, (digit) => '۰۱۲۳۴۵۶۷۸۹'[Number(digit)])}</span></div>
-          <div className="table-toolbar"><form className="table-search" role="search" onSubmit={(event) => event.preventDefault()}><Search size={17} aria-hidden="true" /><input type="search" aria-label="جستجو در جدول سولار" placeholder="جستجو" value={query} onChange={(event) => setQuery(event.target.value)} /></form><div className="table-summary"><strong className="table-count">{siteRows.length.toLocaleString('fa-IR')} سامانه</strong></div><button className="button button-quiet excel-button" type="button" onClick={downloadExcel} disabled={!siteRows.length}><Download size={16} />دانلود اکسل</button></div>
+          <div className="table-toolbar"><SolarTableSearch initialQuery={query} onQueryChange={setQuery} /><div className="table-summary"><strong className="table-count">{siteRows.length.toLocaleString('fa-IR')} سامانه</strong></div><button className="button button-quiet excel-button" type="button" onClick={downloadExcel} disabled={!siteRows.length}><Download size={16} />دانلود اکسل</button></div>
         </div>
         {renderStatusTable(siteRows)}
       </section>}

@@ -93,6 +93,7 @@ button { cursor: pointer; }
 .calendar-day:hover, .calendar-day.selected { background: var(--solar-accent-soft); color: var(--solar-accent); }
 .calendar-today { display: block; width: 100%; margin-top: 8px; padding: 7px 10px; border: 1px solid var(--solar-line); border-radius: 8px; background: var(--solar-field); color: var(--solar-accent); font: inherit; font-size: 12px; font-weight: 650; cursor: pointer; }
 .calendar-today:hover { border-color: var(--solar-accent); background: var(--solar-accent-soft); }
+.jalali-picker-control input:focus-visible { outline: none; box-shadow: none; }
 .table-search { display: flex; align-items: center; gap: 9px; width: min(220px, 100%); height: 36px; padding: 0 11px; border: 1px solid var(--solar-line); border-radius: 999px; background: var(--solar-field); color: var(--solar-muted); }
 .table-search:focus-within { border-color: var(--solar-accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--solar-accent) 16%, transparent); }
 .table-search input { min-width: 0; width: 100%; border: 0; outline: 0; background: transparent; color: var(--solar-ink); font-size: 12px; direction: rtl; text-align: right; }
