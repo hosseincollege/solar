@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { memo, startTransition, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { CalendarDays, Check, ChevronLeft, ChevronRight, Clipboard, Download, Info, MapPin, Monitor, Moon, Plus, RotateCcw, Save, Search, Sun, Trash2, Upload, X } from 'lucide-react';
+import { CalendarDays, Check, ChevronLeft, ChevronRight, Clipboard, Download, History, Info, MapPin, Menu, Monitor, Moon, Pencil, Plus, RotateCcw, Save, Search, ShieldAlert, Sun, Trash2, Upload, X } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import demoData from '@/lib/solar-demo-data.json';
 
@@ -17,14 +17,13 @@ const SolarTableSearch = memo(function SolarTableSearch({ initialQuery, onQueryC
 }) {
   const [value, setValue] = useState(initialQuery);
 
-  useEffect(() => {
-    const timer = window.setTimeout(() => startTransition(() => onQueryChange(value)), 180);
-    return () => window.clearTimeout(timer);
-  }, [value, onQueryChange]);
-
   return <form className="table-search" role="search" onSubmit={(event) => event.preventDefault()}>
     <Search size={17} aria-hidden="true" />
-    <input type="search" aria-label="جستجو در جدول سولار" placeholder="جستجو" value={value} onChange={(event) => setValue(event.target.value)} />
+    <input type="search" aria-label="جستجو در جدول سولار" placeholder="جستجو" value={value} onChange={(event) => {
+      const nextValue = event.target.value;
+      setValue(nextValue);
+      startTransition(() => onQueryChange(nextValue));
+    }} />
   </form>;
 });
 
@@ -310,7 +309,10 @@ export default function SolarWorkspace() {
   const [specialDraftText, setSpecialDraftText] = useState(DEFAULT_SPECIAL_SITE_TEXT);
   const [newSpecialCode, setNewSpecialCode] = useState('');
   const [showSpecialSites, setShowSpecialSites] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const [reports, setReports] = useState<Report[]>([]);
+  const [editingReports, setEditingReports] = useState(false);
+  const [reportMenuOpen, setReportMenuOpen] = useState(false);
   const [selectedColumns, setSelectedColumns] = useState<string[]>(DEFAULT_COLUMNS);
   const [columnsCustomized, setColumnsCustomized] = useState(false);
   const [editingColumns, setEditingColumns] = useState(false);
@@ -331,10 +333,12 @@ export default function SolarWorkspace() {
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const specialFileInputRef = useRef<HTMLInputElement>(null);
 
+  const deferredDownText = useDeferredValue(downText);
+  const deferredUnreachableText = useDeferredValue(unreachableText);
   const inputEntries = useMemo(() => filterLtePairs([
-    ...parseList(downText, 'down'),
-    ...parseList(unreachableText, 'unreachable'),
-  ]), [downText, unreachableText]);
+    ...parseList(deferredDownText, 'down'),
+    ...parseList(deferredUnreachableText, 'unreachable'),
+  ]), [deferredDownText, deferredUnreachableText]);
   const entries = useMemo(() => activeReport && hasSubmitted
     ? filterLtePairs([...parseList(activeReport.downText, 'down'), ...parseList(activeReport.unreachableText, 'unreachable')])
     : inputEntries, [activeReport, hasSubmitted, inputEntries]);
@@ -400,14 +404,14 @@ export default function SolarWorkspace() {
       if (!specialSites.has(entry.site)) continue;
       if (!bySite.has(entry.site)) bySite.set(entry.site, new Map());
     }
-    if (previousReport) for (const [site, states] of previousStatesBySite) {
+    if (showHistory && previousReport) for (const [site, states] of previousStatesBySite) {
       if (bySite.has(site) || (specialSites.has(site) && !activeShowSpecialSites)) continue;
       if (normalizedQuery && !site.toLocaleLowerCase().includes(normalizedQuery)) continue;
       const visible = [...states.keys()].some((code) => selectedColumns.includes(code) || selectedColumns.some((key) => EQUIPMENT_GROUPS.find((group) => group.key === key)?.codes.includes(code)));
       if (visible) bySite.set(site, new Map());
     }
     return [...bySite.entries()].map(([site, states]) => ({ site, states } satisfies SiteRow)).sort((a, b) => a.site.localeCompare(b.site));
-  }, [entries, indexedEntries, deferredQuery, selectedColumns, specialSites, activeShowSpecialSites, previousReport, previousStatesBySite]);
+  }, [entries, indexedEntries, deferredQuery, selectedColumns, specialSites, activeShowSpecialSites, previousReport, previousStatesBySite, showHistory]);
   const visibleSpecialSiteCount = useMemo(() => {
     const normalizedQuery = deferredQuery.trim().toLocaleLowerCase();
     return new Set(indexedEntries
@@ -418,7 +422,9 @@ export default function SolarWorkspace() {
     if (!previousReport) return 'اولین گزارش روز';
     const current = row.states;
     const previous = previousStatesBySite.get(row.site) ?? new Map<string, State>();
-    const codes = new Set([...current.keys(), ...previous.keys()]);
+    const codes = new Set([...current.keys(), ...previous.keys()].filter((code) =>
+      selectedColumns.includes(code) || selectedColumns.some((key) => EQUIPMENT_GROUPS.find((group) => group.key === key)?.codes.includes(code)),
+    ));
     const changes: string[] = [];
     for (const code of codes) {
       const before = previous.get(code);
@@ -450,11 +456,12 @@ export default function SolarWorkspace() {
       if (savedReports) setReports(JSON.parse(savedReports) as Report[]);
       if (savedTheme === 'light' || savedTheme === 'dark' || savedTheme === 'system') setTheme(savedTheme);
       if (draft) {
-        const parsed = JSON.parse(draft) as { downText?: string; unreachableText?: string; specialText?: string; showSpecialSites?: boolean; equipmentColumns?: string[]; equipmentColumnsCustomized?: boolean; equipmentColumnsVersion?: number; capturedAt?: string; capturedDate?: string; capturedTime?: string; selectedHistoryDate?: string };
+        const parsed = JSON.parse(draft) as { downText?: string; unreachableText?: string; specialText?: string; showSpecialSites?: boolean; showHistory?: boolean; equipmentColumns?: string[]; equipmentColumnsCustomized?: boolean; equipmentColumnsVersion?: number; capturedAt?: string; capturedDate?: string; capturedTime?: string; selectedHistoryDate?: string };
         setDownText(parsed.downText ?? '');
         setUnreachableText(parsed.unreachableText ?? '');
         if (!savedSpecialSites && typeof parsed.specialText === 'string') { setSpecialText(parsed.specialText); setSpecialDraftText(parsed.specialText); }
         if (!savedSpecialSites && typeof parsed.showSpecialSites === 'boolean') setShowSpecialSites(parsed.showSpecialSites);
+        if (typeof parsed.showHistory === 'boolean') setShowHistory(parsed.showHistory);
         const hasCustomSelection = parsed.equipmentColumnsVersion === EQUIPMENT_COLUMNS_VERSION && parsed.equipmentColumnsCustomized === true;
         setColumnsCustomized(hasCustomSelection);
         if (hasCustomSelection && parsed.equipmentColumns?.length) setSelectedColumns(parsed.equipmentColumns);
@@ -528,8 +535,17 @@ export default function SolarWorkspace() {
 
   useEffect(() => {
     if (!ready) return;
-    localStorage.setItem(DRAFT_KEY, JSON.stringify({ downText, unreachableText, equipmentColumns: selectedColumns, equipmentColumnsCustomized: columnsCustomized, equipmentColumnsVersion: EQUIPMENT_COLUMNS_VERSION, capturedDate, capturedTime, selectedHistoryDate }));
-  }, [downText, unreachableText, selectedColumns, columnsCustomized, capturedDate, capturedTime, selectedHistoryDate, ready]);
+    const draft = JSON.stringify({ downText, unreachableText, equipmentColumns: selectedColumns, equipmentColumnsCustomized: columnsCustomized, equipmentColumnsVersion: EQUIPMENT_COLUMNS_VERSION, capturedDate, capturedTime, selectedHistoryDate, showHistory });
+    const timer = window.setTimeout(() => {
+      localStorage.setItem(DRAFT_KEY, draft);
+    }, 350);
+    const flushDraft = () => localStorage.setItem(DRAFT_KEY, draft);
+    window.addEventListener('pagehide', flushDraft);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener('pagehide', flushDraft);
+    };
+  }, [downText, unreachableText, selectedColumns, columnsCustomized, capturedDate, capturedTime, selectedHistoryDate, showHistory, ready]);
 
   useEffect(() => {
     if (!ready) return;
@@ -537,10 +553,14 @@ export default function SolarWorkspace() {
   }, [specialText, showSpecialSites, ready]);
 
   function saveReport() {
-    if (!entries.length) { setNotice('مورد قابل‌نمایشی پیدا نشد؛ متن ورودی را بررسی کن.'); return; }
+    const currentEntries = filterLtePairs([
+      ...parseList(downText, 'down'),
+      ...parseList(unreachableText, 'unreachable'),
+    ]);
+    if (!currentEntries.length) { setNotice('مورد قابل‌نمایشی پیدا نشد؛ متن ورودی را بررسی کن.'); return; }
     const createdAt = captureTimestamp(capturedDate, capturedTime);
     if (!createdAt) { setNotice('تاریخ شمسی یا ساعت معتبر نیست؛ قالب تاریخ ۱۴۰۵/۰۸/۰۵ و ساعت ۲۳:۵۹ را وارد کن.'); return; }
-    const report: Report = { id: crypto.randomUUID(), createdAt, entries, downText, unreachableText, specialText, showSpecialSites, equipmentColumns: selectedColumns };
+    const report: Report = { id: crypto.randomUUID(), createdAt, entries: currentEntries, downText, unreachableText, specialText, showSpecialSites, equipmentColumns: selectedColumns };
     const updated = [report, ...reports];
     setReports(updated);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
@@ -767,6 +787,7 @@ export default function SolarWorkspace() {
         <span dir="rtl">سولیار</span><img className="topbar-logo" src="/favicon.ico" alt="" /><strong dir="ltr">SOLYAR</strong>
       </Link>
       <div className="topbar-controls">
+        <button type="button" className="report-menu-button" aria-label={reportMenuOpen ? 'بستن فهرست گزارش‌ها' : 'باز کردن فهرست گزارش‌ها'} title={reportMenuOpen ? 'بستن فهرست گزارش‌ها' : 'گزارش‌ها'} aria-expanded={reportMenuOpen} aria-controls="saved-reports-panel" onClick={() => setReportMenuOpen((open) => !open)}>{reportMenuOpen ? <X size={20} /> : <Menu size={20} />}</button>
         <button type="button" className="info-button" aria-label="آمار بازدید و افراد آنلاین" title="آمار بازدید و افراد آنلاین" onClick={() => setAnalyticsOpen(true)}><Info size={18} /></button>
         <button type="button" className="theme-button" aria-label={`پوسته: ${{ system: 'سیستم', light: 'روشن', dark: 'تیره' }[theme]}؛ برای تغییر کلیک کنید`} title={`پوسته: ${{ system: 'سیستم', light: 'روشن', dark: 'تیره' }[theme]}`} onClick={() => setTheme((current) => current === 'system' ? 'light' : current === 'light' ? 'dark' : 'system')}>
           {theme === 'system' ? <Monitor size={18} /> : theme === 'dark' ? <Moon size={18} /> : <Sun size={18} />}
@@ -780,7 +801,7 @@ export default function SolarWorkspace() {
         <p className="analytics-note" role="status">{window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'آمار بازدید فقط در نسخهٔ مستقرشده روی Vercel فعال است.' : analyticsLoading ? 'در حال دریافت آمار…' : analytics ? 'آمار به‌روز است.' : 'پس از اتصال دیتابیس Vercel، آمار اینجا نمایش داده می‌شود.'}</p>
       </section>
     </div>}    <main className="solar-content" dir="rtl">
-      <section className="solar-intro"><div className="intro-actions"><button className={`button ${formOpen ? 'button-quiet' : 'button-primary'}`} type="button" onClick={() => formOpen ? closeStatusForm() : beginNewStatus()}>{formOpen ? <X size={18} /> : <Plus size={18} />}{formOpen ? 'بستن وضعیت' : 'افزودن وضعیت جدید'}</button><button className="button button-quiet special-entry-button" type="button" onClick={toggleSpecialEditor}><Plus size={17} />{specialEditorOpen ? 'بستن ویرایش' : 'ویرایش سرقت و تخریب'}</button><JalaliDatePicker value={capturedDate} onChange={(value) => { setCapturedDate(value); setSelectedHistoryDate(value); }} /><label className="special-list-toggle special-table-toggle"><input type="checkbox" checked={showSpecialSites} onChange={(event) => setShowSpecialSites(event.target.checked)} /><span>نمایش سرقت و تخریب ({visibleSpecialSiteCount.toLocaleString('fa-IR')})</span></label><button className="icon-button clear-browser-data" type="button" aria-label="پاک‌سازی همهٔ اطلاعات مرورگر" title="پاک‌سازی همهٔ اطلاعات مرورگر" onClick={clearBrowserData}><Trash2 size={17} /></button>{notice && <p className="notice notice-inline" role="status"><Check size={15} />{notice}</p>}</div></section>
+      <section className="solar-intro"><div className="intro-actions"><button className={`button mobile-icon-action add-status-action ${formOpen ? 'button-quiet' : 'button-primary'}`} type="button" aria-label={formOpen ? 'بستن وضعیت' : 'افزودن وضعیت جدید'} title={formOpen ? 'بستن وضعیت' : 'افزودن وضعیت جدید'} onClick={() => formOpen ? closeStatusForm() : beginNewStatus()}>{formOpen ? <X size={18} /> : <Plus size={18} />}<span className="action-label">{formOpen ? 'بستن وضعیت' : 'افزودن وضعیت جدید'}</span></button><button className="button button-quiet special-entry-button mobile-icon-action" type="button" aria-label={specialEditorOpen ? 'بستن ویرایش سرقت و تخریب' : 'ویرایش سرقت و تخریب'} title={specialEditorOpen ? 'بستن ویرایش' : 'ویرایش سرقت و تخریب'} onClick={toggleSpecialEditor}><Pencil size={17} /><span className="action-label">{specialEditorOpen ? 'بستن ویرایش' : 'ویرایش سرقت و تخریب'}</span></button><JalaliDatePicker value={capturedDate} onChange={(value) => { setCapturedDate(value); setSelectedHistoryDate(value); }} /><label className="special-list-toggle special-table-toggle" aria-label="نمایش سرقت و تخریب" title="نمایش سرقت و تخریب"><input type="checkbox" checked={showSpecialSites} onChange={(event) => setShowSpecialSites(event.target.checked)} /><ShieldAlert className="special-list-icon" size={17} aria-hidden="true" /><span className="action-label">نمایش سرقت و تخریب</span><span className="special-count">({visibleSpecialSiteCount.toLocaleString('fa-IR')})</span></label><label className="special-list-toggle special-table-toggle history-table-toggle" aria-label="نمایش موارد رفع‌شده" title="نمایش موارد رفع‌شده"><input type="checkbox" checked={showHistory} onChange={(event) => setShowHistory(event.target.checked)} /><History className="special-list-icon" size={17} aria-hidden="true" /><span className="action-label">نمایش موارد رفع‌شده</span></label><button className="icon-button clear-browser-data" type="button" aria-label="پاک‌سازی همهٔ اطلاعات مرورگر" title="پاک‌سازی همهٔ اطلاعات مرورگر" onClick={clearBrowserData}><Trash2 size={17} /></button></div><div className="notice-slot" aria-live="polite">{notice ? <p className="notice notice-inline" role="status"><Check size={15} />{notice}</p> : <p className="status-placeholder"><span>وضعیت</span><span>پیام‌های این بخش اینجا نمایش داده می‌شوند.</span></p>}</div></section>
 
       {formOpen && <section className="status-form" aria-label="افزودن وضعیت جدید">
         <div className="form-heading"><div><h2>افزودن وضعیت جدید</h2><p>فهرست‌ها را وارد کنید، ستون‌ها را در صورت نیاز ویرایش و ذخیره را بزنید.</p><button className="button button-quiet demo-fill-button" type="button" onClick={fillDemoData}><Clipboard size={16} />پر کردن با داده‌های تست</button></div></div>
@@ -807,8 +828,9 @@ export default function SolarWorkspace() {
         {renderStatusTable(siteRows)}
       </section>}
 
-      <section className="history-card"><div className="history-title"><div><h2>گزارش‌های ذخیره‌شده</h2><span className="count history-count">{reportsForSelectedDate.length.toLocaleString('fa-IR')}</span></div></div>
-        {reportsForSelectedDate.length ? <ul className="report-list">{reportsForSelectedDate.map((report) => {
+      {reportMenuOpen && <button type="button" className="report-drawer-backdrop" aria-label="بستن فهرست گزارش‌ها" onClick={() => setReportMenuOpen(false)} />}
+      <section className={`history-card${reportMenuOpen ? ' mobile-open' : ''}`} id="saved-reports-panel"><div className="history-title"><button type="button" className="icon-button report-edit-toggle" aria-label={editingReports ? 'پایان ویرایش گزارش‌ها' : 'ویرایش گزارش‌ها'} title={editingReports ? 'پایان ویرایش' : 'ویرایش گزارش‌ها'} aria-pressed={editingReports} onClick={() => setEditingReports((current) => !current)}>{editingReports ? <Check size={17} /> : <Pencil size={16} />}</button><div><h2>گزارش‌ها</h2><span className="count history-count">{reportsForSelectedDate.length.toLocaleString('fa-IR')}</span></div></div>
+        {reportsForSelectedDate.length ? <ul className="report-list">{reportsForSelectedDate.map((report, index) => {
           const isActive = activeReport?.id === report.id && hasSubmitted;
           const visibleEquipment = new Set(report.equipmentColumns?.length ? report.equipmentColumns : DEFAULT_COLUMNS);
           const reportSpecialSites = parseSpecialSiteList(report.specialText ?? specialText);
@@ -816,8 +838,15 @@ export default function SolarWorkspace() {
             .filter((entry) => (visibleEquipment.has(entry.equipment) || [...visibleEquipment].some((key) => EQUIPMENT_GROUPS.find((group) => group.key === key)?.codes.includes(entry.equipment)))
               && (report.showSpecialSites || !reportSpecialSites.has(entry.site)))
             .map((entry) => entry.site));
-          const reportCount = isActive ? siteRows.length : reportSites.size;
-          return <li className={isActive ? 'active-report' : undefined} key={report.id}><button type="button" className="report-main" onClick={() => restoreReport(report)}><span>{formatTime(report.createdAt)}</span><small>{reportCount.toLocaleString('fa-IR')} سامانه</small></button><button type="button" className="icon-button" aria-label="حذف گزارش" title="حذف گزارش" onClick={() => deleteReport(report.id)}><Trash2 size={17} /></button></li>;
+          const previousSnapshot = showHistory ? reportsForSelectedDate[index + 1] : undefined;
+          const historicalSites = previousSnapshot ? new Set(previousSnapshot.entries
+            .filter((entry) => (visibleEquipment.has(entry.equipment) || [...visibleEquipment].some((key) => EQUIPMENT_GROUPS.find((group) => group.key === key)?.codes.includes(entry.equipment)))
+              && (report.showSpecialSites || !reportSpecialSites.has(entry.site)))
+            .map((entry) => entry.site)
+            .filter((site) => !reportSites.has(site))) : new Set<string>();
+          const reportCount = isActive ? siteRows.length : reportSites.size + historicalSites.size;
+          const sequenceNumber = reportsForSelectedDate.length - index;
+          return <li className={isActive ? 'active-report' : undefined} key={report.id}><span className="report-row-number" aria-label={`ردیف ${sequenceNumber}`}>{sequenceNumber.toLocaleString('fa-IR')}</span><button type="button" className="report-main" onClick={() => { restoreReport(report); setReportMenuOpen(false); }}><time dir="ltr">{formatTime(report.createdAt)}</time><small>{reportCount.toLocaleString('fa-IR')} سامانه</small></button>{editingReports && <button type="button" className="icon-button report-delete-button" aria-label={`حذف گزارش ردیف ${sequenceNumber}`} title="حذف گزارش" onClick={() => deleteReport(report.id)}><Trash2 size={17} /></button>}</li>;
         })}</ul> : <p className="empty-history">برای این تاریخ گزارشی ذخیره نشده است.</p>}
       </section>
       <footer className="page-footer-intro" dir="rtl"><div className="page-footer-heading"><h1>وضعیت تجهیزات در سامانه سولار</h1><span className="footer-intro-icon" aria-hidden="true">📡</span></div><p>فهرست‌های Down و Unreachable را در باکس‌های مربوطه جای‌گذاری کنید؛ اطلاعات به‌صورت محلی در حافظهٔ مرورگر ذخیره می‌شوند.</p></footer>
